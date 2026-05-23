@@ -7,16 +7,17 @@ import bcrypt
 from database import ensure_database_exists, engine, SessionLocal, Base
 from config import DB_HOSTNAME, DB_NAME
 import models  # registers all models with Base
-from routers import auth
+from routers import auth, schemes
+from services.amfi import check_and_reload_amfi
+from services.nav import check_and_load_nav
 
 
 def seed_admin():
     db = SessionLocal()
     try:
-        from models import User
-        if not db.query(User).filter(User.username == "admin").first():
+        if not db.query(models.User).filter(models.User.username == "admin").first():
             hashed = bcrypt.hashpw(b"password", bcrypt.gensalt()).decode()
-            db.add(User(username="admin", password_hash=hashed))
+            db.add(models.User(username="admin", password_hash=hashed))
             db.commit()
             print("[DB] Admin user seeded")
         else:
@@ -31,14 +32,20 @@ async def lifespan(app: FastAPI):
     ensure_database_exists()
     Base.metadata.create_all(bind=engine)
     seed_admin()
-    with engine.connect() as conn:
-        conn.execute(text("SELECT 1"))
-    print("[Startup] Database connectivity verified.")
+
+    db = SessionLocal()
+    try:
+        check_and_reload_amfi(db)
+        await check_and_load_nav(db)
+    finally:
+        db.close()
+
+    print("[Startup] Startup complete — API ready.")
     yield
     print("[Shutdown] MFSelect API stopped.")
 
 
-app = FastAPI(title="MFSelect API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="MFSelect API", version="0.2.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -49,6 +56,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(schemes.router)
 
 
 @app.get("/health")
