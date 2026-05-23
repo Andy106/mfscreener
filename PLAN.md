@@ -1,7 +1,14 @@
 # Mutual Funds Screener (MFSelect)
 
-## Phase 0 - Verify database connectivity
-- Connect to the database instance using the hostname, username, password, port details available in the .env file and confirm that is working fine. 
+## Phase 0 - Verify database connectivity ✅ COMPLETE
+- Connect to the database instance using the hostname, username, password, port details available in the .env file and confirm that is working fine.
+
+### Validation Results
+- **PostgreSQL version:** 18.3 on aarch64-unknown-linux-gnu (AWS RDS)
+- **Host:** database-1.c6nvu354y8s3.us-east-1.rds.amazonaws.com:5432
+- **Database:** `mfscreener` confirmed reachable
+- **GET /health response:** `{"status": "ok", "host": "database-1.c6nvu354y8s3.us-east-1.rds.amazonaws.com", "database": "mfscreener"}`
+- **Files created:** `backend/config.py`, `backend/database.py`, `backend/main.py`, `backend/requirements.txt`
 
 ## Phase 1 - Login Module
 - A table `users` within the database `mfscreener` with 1 default record `admin`, with password `password`.
