@@ -9,7 +9,6 @@ AMFI_URL = "https://portal.amfiindia.com/spages/NAVAll.txt"
 
 TARGET_CATEGORIES = {
     "Equity Scheme - Flexi Cap Fund",
-    "Equity Scheme - Large Cap Fund",
     "Equity Scheme - Multi Cap Fund",
 }
 

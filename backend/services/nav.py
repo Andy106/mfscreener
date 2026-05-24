@@ -1,7 +1,8 @@
 import asyncio
 import httpx
 from datetime import date, datetime
-from sqlalchemy import text
+from sqlalchemy import text, insert
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from models import SchemeDetail, NavDetail, MfapiReloadTracker
@@ -110,16 +111,13 @@ async def check_and_load_nav(db: Session):
 
 
 def _insert_batch(db: Session, batch: list[dict]):
+    """Single multi-value INSERT — avoids executemany lock contention."""
     if not batch:
         return
-    db.execute(
-        text("""
-            INSERT INTO nav_details (scheme_code, nav_date, nav_value)
-            VALUES (:scheme_code, :nav_date, :nav_value)
-            ON CONFLICT (scheme_code, nav_date) DO NOTHING
-        """),
-        batch,
+    stmt = pg_insert(NavDetail.__table__).values(batch).on_conflict_do_nothing(
+        index_elements=["scheme_code", "nav_date"]
     )
+    db.execute(stmt)
     db.commit()
 
 
