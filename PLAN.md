@@ -21,7 +21,7 @@
 - **Frontend** login form tested end-to-end; successful login redirects to `/dashboard`
 - **Files created:** `backend/models.py`, `backend/routers/auth.py`, `frontend/app/login/page.tsx`, `frontend/app/dashboard/page.tsx`
 
-### Phase 2 — Mutual Fund Details Module
+## Phase 2 — Mutual Fund Details Module ✅ COMPLETE
 - Fetch the Scheme Details of all the Mutual Fund Schemes available within India from the site - https://portal.amfiindia.com/spages/NAVAll.txt. 
 - This file includes blank lines and raw text headers (e.g.- Open Ended Schemes(Debt Scheme - Banking and PSU Fund)) interleaved between blocks of data. Parser must dynamically capture the header lines as it streams through rows to correctly extract the Scheme Category and Scheme Type for downstream rows.
 - Filter and remove any schemes that are inactive - carry the keyword `discontinued` in the Scheme Name.
@@ -36,6 +36,15 @@
 - Implement backend logic to do a delta load of this data on a daily basis (only load NAV details for dates not already available in the database). Please use a metadata table `mfapi_reload_tracker` within the database `mfscreener` to maintain latest_nav_date per scheme for ease of reference for the delta load. When the application runs for the first time, it should check what was the latest_nav_date per scheme and if it is not the same as today for any scheme, it should do a delta load of the data. For now, no need to implement any orchestration logic to perform this delta load on a daily basis if the application has been running continously. 
 - Use Postgres generate_series() capability to address any gaps within the NAV data e.g.- the NAV will be missing for Saturdays and Sundays. In that case, the Last Observed NAV must be carry forwarded.
 - Create /nav/{scheme_code} GET endpoint to retrieve NAV details of all the schemes from the `nav_details` table. Add query parameters for Start Date and End Date.
+
+### Validation Results
+- **scheme_details:** 309 schemes loaded (Flexi Cap: ~153, Multi Cap: ~156)
+- **nav_details:** 843,989 rows after gap-fill; date range 2006-04-02 to 2026-05-22
+- **GET /schemes** → returns all 309 schemes ordered by name
+- **GET /nav/{scheme_code}** → returns paginated NAV rows with optional start_date/end_date filters
+- **Daily reload:** AMFI tracker and mfapi tracker checked on startup; skipped if already current
+- **Dashboard:** scheme list table with live search and category badge visible post-login
+- **Files created/modified:** `backend/services/amfi.py`, `backend/services/nav.py`, `backend/routers/schemes.py`, `backend/models.py`, `frontend/app/dashboard/page.tsx`
 
 ### Phase 3 — Mutual Fund Screener Module
 
