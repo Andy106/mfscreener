@@ -33,16 +33,16 @@
 - Leverage an asynchronous worker pool pattern using Python’s httpx or aiohttp along with a semaphore limit (e.g.- max 10–20 concurrent requests) to avoid crashing the worker or getting blacklisted by MFAPI. 
 - Dump the data into an in-memory queue. 
 - Take the data from the in-memory queue and write it to a table named `nav_details` within `mfscreener` database in batches of 5000 to 10000 rows per transaction. Create a composite index on (scheme_code, nav_date).
-- Implement backend logic to do a delta load of this data on a daily basis (only load NAV details for dates not already available in the database). Please use a metadata table `mfapi_reload_tracker` within the database `mfscreener` to maintain latest_nav_date per scheme for ease of reference for the delta load. When the application runs for the first time, it should check what was the latest_nav_date per scheme and if it is not the same as today for any scheme, it should do a delta load of the data. For now, no need to implement any orchestration logic to perform this delta load on a daily basis if the application has been running continously. 
+- Use a single-row metadata table `mfapi_reload_tracker` (columns: `id`, `last_data_reload`) to track when NAV data was last loaded. On application startup: for each scheme that has no existing rows in `nav_details` perform a full historical load (no date filter); for schemes that already have data and `last_data_reload < today` perform a delta load using `https://api.mfapi.in/mf/{scheme_code}?startDate=YYYY-MM-DD` with `last_data_reload` as the startDate (the API accepts `YYYY-MM-DD` format). New rows are appended with `ON CONFLICT DO NOTHING`. Update `last_data_reload` to today after a successful load. For now, no need to implement any orchestration logic to perform this delta load on a daily basis if the application has been running continuously.
 - Use Postgres generate_series() capability to address any gaps within the NAV data e.g.- the NAV will be missing for Saturdays and Sundays. In that case, the Last Observed NAV must be carry forwarded.
 - Create /nav/{scheme_code} GET endpoint to retrieve NAV details of all the schemes from the `nav_details` table. Add query parameters for Start Date and End Date.
 
 ### Validation Results
-- **scheme_details:** 309 schemes loaded (Flexi Cap: ~153, Multi Cap: ~156)
+- **scheme_details:** 309 schemes loaded (Flexi Cap + Multi Cap only)
 - **nav_details:** 843,989 rows after gap-fill; date range 2006-04-02 to 2026-05-22
 - **GET /schemes** → returns all 309 schemes ordered by name
-- **GET /nav/{scheme_code}** → returns paginated NAV rows with optional start_date/end_date filters
-- **Daily reload:** AMFI tracker and mfapi tracker checked on startup; skipped if already current
+- **GET /nav/{scheme_code}** → returns NAV rows with optional start_date/end_date filters
+- **Daily reload:** single-row `mfapi_reload_tracker` checked on startup; new schemes get full load, existing schemes get delta via `?startDate=DD-MM-YYYY`; skipped if already current
 - **Dashboard:** scheme list table with live search and category badge visible post-login
 - **Files created/modified:** `backend/services/amfi.py`, `backend/services/nav.py`, `backend/routers/schemes.py`, `backend/models.py`, `frontend/app/dashboard/page.tsx`
 

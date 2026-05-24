@@ -39,5 +39,5 @@ class NavDetail(Base):
 class MfapiReloadTracker(Base):
     __tablename__ = "mfapi_reload_tracker"
 
-    scheme_code = Column(String, primary_key=True)
-    latest_nav_date = Column(Date, nullable=False)
+    id = Column(Integer, primary_key=True)
+    last_data_reload = Column(Date, nullable=False)

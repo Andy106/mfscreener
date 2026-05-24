@@ -1,7 +1,7 @@
 import asyncio
 import httpx
 from datetime import date, datetime
-from sqlalchemy import text, insert
+from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -18,9 +18,13 @@ async def _fetch_scheme_nav(
     scheme_code: str,
     since_date: date | None,
 ) -> list[dict]:
+    """Fetch NAV for one scheme. since_date=None means full historical load."""
     async with sem:
         try:
-            resp = await client.get(f"{MFAPI_BASE}/{scheme_code}", timeout=30)
+            url = f"{MFAPI_BASE}/{scheme_code}"
+            if since_date:
+                url += f"?startDate={since_date.strftime('%Y-%m-%d')}"
+            resp = await client.get(url, timeout=30)
             resp.raise_for_status()
             data = resp.json()
         except Exception as e:
@@ -34,51 +38,72 @@ async def _fetch_scheme_nav(
             nav_value = float(entry["nav"])
         except (ValueError, KeyError):
             continue
-        if since_date and nav_date <= since_date:
-            continue
         rows.append({"scheme_code": scheme_code, "nav_date": nav_date, "nav_value": nav_value})
 
     return rows
 
 
 async def check_and_load_nav(db: Session):
-    """Delta-load NAV from mfapi for any scheme not current as of today."""
+    """
+    On startup:
+    - Schemes with no NAV rows → full historical load (no startDate).
+    - Schemes with existing rows and last_data_reload < today → delta load
+      via ?startDate=DD-MM-YYYY using last_data_reload as the cutoff.
+    - Skip entirely if last_data_reload == today.
+    """
+    tracker = db.query(MfapiReloadTracker).first()
+    today = date.today()
+
+    if tracker and tracker.last_data_reload >= today:
+        print("[MFAPI] NAV data is up to date.")
+        return
+
     scheme_codes = [s.scheme_code for s in db.query(SchemeDetail.scheme_code).all()]
     if not scheme_codes:
         print("[MFAPI] No schemes found — skipping NAV load.")
         return
 
-    trackers = {t.scheme_code: t.latest_nav_date for t in db.query(MfapiReloadTracker).all()}
-    today = date.today()
-    to_update = [c for c in scheme_codes if c not in trackers or trackers[c] < today]
+    # Schemes that already have NAV data get a date-filtered delta load;
+    # newly added schemes get a full historical load.
+    loaded_codes = {
+        row[0]
+        for row in db.execute(
+            text("SELECT DISTINCT scheme_code FROM nav_details")
+        ).fetchall()
+    }
 
-    if not to_update:
-        print("[MFAPI] NAV data is up to date for all schemes.")
-        return
+    since = tracker.last_data_reload if tracker else None
+    load_type_log = f"delta from {since}" if since else "full load"
+    new_schemes = [c for c in scheme_codes if c not in loaded_codes]
+    delta_schemes = [c for c in scheme_codes if c in loaded_codes]
 
-    print(f"[MFAPI] Delta-loading NAV for {len(to_update)} schemes (concurrency={SEMAPHORE_LIMIT})...")
+    print(
+        f"[MFAPI] Loading NAV — {len(new_schemes)} new (full), "
+        f"{len(delta_schemes)} existing ({load_type_log}), "
+        f"concurrency={SEMAPHORE_LIMIT}"
+    )
 
-    # Async fetch — producer fills queue
-    queue: asyncio.Queue[list[dict]] = asyncio.Queue()
     sem = asyncio.Semaphore(SEMAPHORE_LIMIT)
-
     async with httpx.AsyncClient() as client:
         results = await asyncio.gather(
-            *[_fetch_scheme_nav(client, sem, code, trackers.get(code)) for code in to_update]
+            *[_fetch_scheme_nav(client, sem, code, None) for code in new_schemes],
+            *[_fetch_scheme_nav(client, sem, code, since) for code in delta_schemes],
         )
 
-    for rows in results:
-        await queue.put(rows)
-
-    # Drain queue → batch insert
+    # results order matches: new_schemes first, then delta_schemes
+    all_codes = new_schemes + delta_schemes
     total = 0
     batch: list[dict] = []
-    while not queue.empty():
-        batch.extend(queue.get_nowait())
-        if len(batch) >= BATCH_SIZE:
-            _insert_batch(db, batch)
-            total += len(batch)
-            batch = []
+    updated_schemes: list[str] = []
+
+    for code, rows in zip(all_codes, results):
+        if rows:
+            updated_schemes.append(code)
+            batch.extend(rows)
+            if len(batch) >= BATCH_SIZE:
+                _insert_batch(db, batch)
+                total += len(batch)
+                batch = []
 
     if batch:
         _insert_batch(db, batch)
@@ -86,32 +111,21 @@ async def check_and_load_nav(db: Session):
 
     print(f"[MFAPI] Inserted {total} new NAV rows.")
 
-    # Update tracker per scheme
-    for code in to_update:
-        latest = (
-            db.query(NavDetail.nav_date)
-            .filter(NavDetail.scheme_code == code)
-            .order_by(NavDetail.nav_date.desc())
-            .first()
-        )
-        if not latest:
-            continue
-        tracker = db.query(MfapiReloadTracker).filter(MfapiReloadTracker.scheme_code == code).first()
-        if tracker:
-            tracker.latest_nav_date = latest.nav_date
-        else:
-            db.add(MfapiReloadTracker(scheme_code=code, latest_nav_date=latest.nav_date))
+    if updated_schemes:
+        print(f"[MFAPI] Running gap-fill for {len(updated_schemes)} schemes...")
+        _gap_fill(db, updated_schemes)
 
+    if tracker:
+        tracker.last_data_reload = today
+    else:
+        db.add(MfapiReloadTracker(last_data_reload=today))
     db.commit()
 
-    # Gap-fill weekends / holidays by carrying forward last observed NAV
-    print(f"[MFAPI] Running gap-fill for {len(to_update)} schemes...")
-    _gap_fill(db, to_update)
     print("[MFAPI] NAV load complete.")
 
 
 def _insert_batch(db: Session, batch: list[dict]):
-    """Single multi-value INSERT — avoids executemany lock contention."""
+    """Bulk upsert — skips rows already present."""
     if not batch:
         return
     stmt = pg_insert(NavDetail.__table__).values(batch).on_conflict_do_nothing(
@@ -122,7 +136,7 @@ def _insert_batch(db: Session, batch: list[dict]):
 
 
 def _gap_fill(db: Session, scheme_codes: list[str]):
-    """Fill missing dates within each scheme's NAV range (carries forward last known NAV)."""
+    """Fill missing calendar dates by carrying forward the last known NAV."""
     for scheme_code in scheme_codes:
         db.execute(
             text("""
