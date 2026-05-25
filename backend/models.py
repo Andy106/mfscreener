@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Date, Numeric
+from sqlalchemy import Column, Integer, String, Date, Numeric, Index
 from database import Base
 
 
@@ -41,3 +41,30 @@ class MfapiReloadTracker(Base):
 
     id = Column(Integer, primary_key=True)
     last_data_reload = Column(Date, nullable=False)
+
+
+class RollingReturnDetail(Base):
+    __tablename__ = "rolling_return_details"
+
+    scheme_code = Column(String, primary_key=True)
+    nav_date = Column(Date, primary_key=True)
+    return_1y = Column(Numeric(12, 6), nullable=True)
+    return_3y = Column(Numeric(12, 6), nullable=True)
+    return_5y = Column(Numeric(12, 6), nullable=True)
+
+
+class RollingRiskDetail(Base):
+    __tablename__ = "rolling_risk_details"
+
+    scheme_code = Column(String, primary_key=True)
+    nav_date = Column(Date, primary_key=True)
+    sd_1y = Column(Numeric(12, 6), nullable=True)
+    sd_3y = Column(Numeric(12, 6), nullable=True)
+    sd_5y = Column(Numeric(12, 6), nullable=True)
+
+
+class MetricsCalculationTracker(Base):
+    __tablename__ = "metrics_calculation_tracker"
+
+    scheme_code = Column(String, primary_key=True)
+    latest_nav_date_factored = Column(Date, nullable=False)

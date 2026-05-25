@@ -7,9 +7,10 @@ import bcrypt
 from database import ensure_database_exists, engine, SessionLocal, Base
 from config import DB_HOSTNAME, DB_NAME
 import models  # registers all models with Base
-from routers import auth, schemes
+from routers import auth, schemes, metrics
 from services.amfi import check_and_reload_amfi
 from services.nav import check_and_load_nav
+from services.metrics import check_and_calculate_metrics
 
 
 def seed_admin():
@@ -37,6 +38,7 @@ async def lifespan(app: FastAPI):
     try:
         check_and_reload_amfi(db)
         await check_and_load_nav(db)
+        check_and_calculate_metrics(db)
     finally:
         db.close()
 
@@ -45,7 +47,7 @@ async def lifespan(app: FastAPI):
     print("[Shutdown] MFSelect API stopped.")
 
 
-app = FastAPI(title="MFSelect API", version="0.2.0", lifespan=lifespan)
+app = FastAPI(title="MFSelect API", version="0.3.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -57,6 +59,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(schemes.router)
+app.include_router(metrics.router)
 
 
 @app.get("/health")
