@@ -43,6 +43,7 @@ export default function DashboardPage() {
   const [allSchemes, setAllSchemes] = useState<Scheme[]>([]);
   const [category, setCategory] = useState(CATEGORIES[0]);
   const [selectedCodes, setSelectedCodes] = useState<Set<string>>(new Set());
+  const [schemeSearch, setSchemeSearch] = useState("");
 
   // Filter state (only applied on click)
   const [startDate, setStartDate] = useState("2015-01-01");
@@ -68,6 +69,7 @@ export default function DashboardPage() {
         const filtered = data.filter((s) => s.scheme_category === category);
         setAllSchemes(filtered);
         setSelectedCodes(new Set(filtered.map((s) => s.scheme_code)));
+        setSchemeSearch("");
         setRows([]);
         setHasApplied(false);
       });
@@ -113,6 +115,13 @@ export default function DashboardPage() {
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }
+
+  const visibleSchemes = schemeSearch.trim()
+    ? allSchemes.filter((s) =>
+        s.scheme_name.toLowerCase().includes(schemeSearch.toLowerCase()) ||
+        s.fund_house.toLowerCase().includes(schemeSearch.toLowerCase())
+      )
+    : allSchemes;
 
   const allChecked = allSchemes.length > 0 && selectedCodes.size === allSchemes.length;
   const someChecked = selectedCodes.size > 0 && selectedCodes.size < allSchemes.length;
@@ -168,7 +177,15 @@ export default function DashboardPage() {
                   Schemes ({selectedCodes.size}/{allSchemes.length})
                 </label>
               </div>
-              {/* All checkbox */}
+              {/* Search box */}
+              <input
+                type="text"
+                placeholder="Search schemes..."
+                value={schemeSearch}
+                onChange={(e) => setSchemeSearch(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-xs text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 mb-1"
+              />
+              {/* All checkbox — always operates on the full list */}
               <label className="flex items-center gap-2 py-1 px-2 rounded hover:bg-gray-50 cursor-pointer">
                 <input
                   type="checkbox"
@@ -179,19 +196,23 @@ export default function DashboardPage() {
                 />
                 <span className="text-sm font-medium text-gray-700">All</span>
               </label>
-              {/* Scheme list */}
-              <div className="mt-1 max-h-72 overflow-y-auto space-y-0.5">
-                {allSchemes.map((s) => (
-                  <label key={s.scheme_code} className="flex items-start gap-2 py-1 px-2 rounded hover:bg-gray-50 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={selectedCodes.has(s.scheme_code)}
-                      onChange={() => toggleOne(s.scheme_code)}
-                      className="mt-0.5 rounded border-gray-300 text-blue-600 shrink-0"
-                    />
-                    <span className="text-xs text-gray-700 leading-tight">{s.scheme_name}</span>
-                  </label>
-                ))}
+              {/* Filtered scheme list */}
+              <div className="mt-1 max-h-64 overflow-y-auto space-y-0.5">
+                {visibleSchemes.length === 0 ? (
+                  <p className="text-xs text-gray-400 px-2 py-2">No schemes match.</p>
+                ) : (
+                  visibleSchemes.map((s) => (
+                    <label key={s.scheme_code} className="flex items-start gap-2 py-1 px-2 rounded hover:bg-gray-50 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectedCodes.has(s.scheme_code)}
+                        onChange={() => toggleOne(s.scheme_code)}
+                        className="mt-0.5 rounded border-gray-300 text-blue-600 shrink-0"
+                      />
+                      <span className="text-xs text-gray-700 leading-tight">{s.scheme_name}</span>
+                    </label>
+                  ))
+                )}
               </div>
             </div>
 
