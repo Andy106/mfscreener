@@ -81,15 +81,16 @@ def get_screener(
     category: Optional[str] = Query(None),
     start_date: Optional[date] = Query(None),
     end_date: Optional[date] = Query(None),
+    scheme_codes: Optional[str] = Query(None),  # comma-separated list
     db: Session = Depends(get_db),
 ):
     """
-    Returns all schemes with pre-aggregated Min/Max/Avg rolling returns and
-    standard deviations. Used by the screener dashboard page.
+    Returns schemes with Min/Max/Avg rolling returns and standard deviations.
+    scheme_codes: optional comma-separated filter e.g. "120503,119551"
     """
+    params: dict = {}
     date_filter_r = ""
     date_filter_k = ""
-    params: dict = {}
     if start_date:
         date_filter_r += " AND r.nav_date >= :sd"
         date_filter_k += " AND k.nav_date >= :sd"
@@ -99,10 +100,15 @@ def get_screener(
         date_filter_k += " AND k.nav_date <= :ed"
         params["ed"] = end_date
 
-    cat_filter = ""
+    where = "WHERE 1=1"
     if category:
-        cat_filter = " AND s.scheme_category = :cat"
+        where += " AND s.scheme_category = :cat"
         params["cat"] = category
+    if scheme_codes:
+        codes = [c.strip() for c in scheme_codes.split(",") if c.strip()]
+        if codes:
+            placeholders = ", ".join(f"'{c}'" for c in codes)
+            where += f" AND s.scheme_code IN ({placeholders})"
 
     sql = f"""
         SELECT
@@ -114,11 +120,9 @@ def get_screener(
             MIN(k.sd_3y)     AS min_sd_3y,     MAX(k.sd_3y)     AS max_sd_3y,     AVG(k.sd_3y)     AS avg_sd_3y,
             MIN(k.sd_5y)     AS min_sd_5y,     MAX(k.sd_5y)     AS max_sd_5y,     AVG(k.sd_5y)     AS avg_sd_5y
         FROM scheme_details s
-        LEFT JOIN rolling_return_details r
-            ON s.scheme_code = r.scheme_code {date_filter_r}
-        LEFT JOIN rolling_risk_details k
-            ON s.scheme_code = k.scheme_code {date_filter_k}
-        WHERE 1=1 {cat_filter}
+        LEFT JOIN rolling_return_details r ON s.scheme_code = r.scheme_code {date_filter_r}
+        LEFT JOIN rolling_risk_details k   ON s.scheme_code = k.scheme_code {date_filter_k}
+        {where}
         GROUP BY s.scheme_code, s.scheme_name, s.fund_house, s.scheme_category, s.scheme_type
         ORDER BY s.scheme_name
     """
@@ -151,11 +155,12 @@ def _summary(db, table: str, cols: list[str], scheme_code: str, start_date, end_
     )
     sql = f"SELECT {selects} FROM {table} WHERE scheme_code = :sc {date_clause}"
     row = db.execute(text(sql), params).fetchone()
+    mapping = row._mapping
     result = {}
     for c in cols:
-        result[f"min_{c}"] = _f(row[f"min_{c}"])
-        result[f"max_{c}"] = _f(row[f"max_{c}"])
-        result[f"avg_{c}"] = _f(row[f"avg_{c}"])
+        result[f"min_{c}"] = _f(mapping[f"min_{c}"])
+        result[f"max_{c}"] = _f(mapping[f"max_{c}"])
+        result[f"avg_{c}"] = _f(mapping[f"avg_{c}"])
     return result
 
 
