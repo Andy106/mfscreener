@@ -46,7 +46,7 @@
 - **Dashboard:** scheme list table with live search and category badge visible post-login
 - **Files created/modified:** `backend/services/amfi.py`, `backend/services/nav.py`, `backend/routers/schemes.py`, `backend/models.py`, `frontend/app/dashboard/page.tsx`
 
-### Phase 3 — Mutual Fund Screener Module
+## Phase 3 — Mutual Fund Screener Module ✅ COMPLETE
 
 - Leverage SQL to query the `nav_details` table and calculate the date wise - 1 Year (1Y), 3 Year (3Y), 5 Year (5Y) Rolling returns and 1 Year, 3 Year, 5 Year Rolling Standard Deviations of each Scheme. 
 - These must be calculated on a daily basis. Please use a metadata table named `metrics_calculation_tracker` within the database `mfscreener` to maintain latest_nav_date_factored_in_calculations per scheme separately for ease of reference. When the application runs for the first time, it should check what was the latest_nav_date_factored_in_calculation per scheme and if it is not the same as today for any scheme, it should do the calculations for the missed dates. For now, no need to implement any orchestration logic to perform this process on a daily basis if the application has been running continously. 
@@ -55,6 +55,17 @@
 - Create /risk/{scheme_code} GET endpoint to retrieve Rolling 1Y, 3Y, 5Y Standard Deviations of each scheme from the 'rolling_risk_details' table. Add query parameters for Start Date and End Date.
 - Create /returns_summary/{scheme_code} and /risk_summary/{scheme_code} GET endpoints that support query parameters for Start Date and End Date. For a given Scheme Code, Start Date and End Date, it must dynamically calculate the Minimum, Maximum and Average 1Y, 3Y and 5Y Rolling Returns and Rolling Standard Deviations.
 - Build the Frontend to display filters for Scheme Category. For the given filter selection, display all the Schemes' Details along with associated Minimum, Maximum and Average 1Y, 3Y and 5Y Rolling Returns and Rolling Standard Deviations.
+
+### Validation Results
+- **rolling_return_details:** 734,557 rows across 309 schemes
+- **rolling_risk_details:** 731,680 rows across 309 schemes
+- **metrics_calculation_tracker:** 309/309 schemes tracked
+- **Calculation method:** pandas rolling windows (1Y=365d, 3Y=1095d, 5Y=1825d); returns as annualised CAGR; SD annualised via sqrt(252)
+- **GET /returns/{scheme_code}**, **GET /risk/{scheme_code}** → time-series with optional start_date/end_date
+- **GET /returns_summary/{scheme_code}**, **GET /risk_summary/{scheme_code}** → Min/Max/Avg per horizon with optional date range
+- **GET /screener** → single aggregated endpoint used by dashboard; accepts category, start_date, end_date
+- **Dashboard:** screener table with category dropdown, date range pickers, search, and Min/Max/Avg columns for all 6 metric series
+- **Files created/modified:** `backend/models.py`, `backend/services/metrics.py`, `backend/routers/metrics.py`, `backend/main.py`, `frontend/app/dashboard/page.tsx`
 
 ### Phase 4 — Mutual Fund Watchlist Module
 - Enhance the frontend to allow the user to select and save any Mutual Fund Scheme (chosen based on its summary statistics) to a Watchlist.
