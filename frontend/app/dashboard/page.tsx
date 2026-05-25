@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 interface Scheme {
   scheme_code: string;
@@ -39,21 +40,21 @@ function sd(v: number | null) {
 export default function DashboardPage() {
   const router = useRouter();
 
-  // Scheme list for the category (lightweight, from /schemes)
   const [allSchemes, setAllSchemes] = useState<Scheme[]>([]);
   const [category, setCategory] = useState(CATEGORIES[0]);
   const [selectedCodes, setSelectedCodes] = useState<Set<string>>(new Set());
   const [schemeSearch, setSchemeSearch] = useState("");
 
-  // Filter state (only applied on click)
   const [startDate, setStartDate] = useState("2015-01-01");
   const [endDate, setEndDate] = useState(new Date().toISOString().slice(0, 10));
 
-  // Results
   const [rows, setRows] = useState<SchemeRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [hasApplied, setHasApplied] = useState(false);
+
+  const [watchlistCodes, setWatchlistCodes] = useState<Set<string>>(new Set());
+  const [watchlistBusy, setWatchlistBusy] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!sessionStorage.getItem("isLoggedIn")) {
@@ -61,7 +62,13 @@ export default function DashboardPage() {
     }
   }, [router]);
 
-  // Load scheme list whenever category changes
+  useEffect(() => {
+    fetch(`${process.env.NEXT_PUBLIC_API_URL}/watchlist`)
+      .then((r) => r.json())
+      .then((data: Scheme[]) => setWatchlistCodes(new Set(data.map((s) => s.scheme_code))))
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     fetch(`${process.env.NEXT_PUBLIC_API_URL}/schemes`)
       .then((r) => r.json())
@@ -101,7 +108,6 @@ export default function DashboardPage() {
     const params = new URLSearchParams({ category });
     if (startDate) params.set("start_date", startDate);
     if (endDate) params.set("end_date", endDate);
-    // Only pass scheme_codes if it's a subset (not all selected)
     if (selectedCodes.size < allSchemes.length) {
       params.set("scheme_codes", [...selectedCodes].join(","));
     }
@@ -114,6 +120,30 @@ export default function DashboardPage() {
       .then((data: SchemeRow[]) => setRows(data))
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
+  }
+
+  async function toggleWatchlist(code: string) {
+    if (watchlistBusy.has(code)) return;
+    setWatchlistBusy((prev) => new Set(prev).add(code));
+    const inWatchlist = watchlistCodes.has(code);
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/watchlist/${code}`, {
+        method: inWatchlist ? "DELETE" : "POST",
+      });
+      if (res.ok) {
+        setWatchlistCodes((prev) => {
+          const next = new Set(prev);
+          inWatchlist ? next.delete(code) : next.add(code);
+          return next;
+        });
+      }
+    } finally {
+      setWatchlistBusy((prev) => {
+        const next = new Set(prev);
+        next.delete(code);
+        return next;
+      });
+    }
   }
 
   const visibleSchemes = schemeSearch.trim()
@@ -130,9 +160,11 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
         <h1 className="text-lg font-bold text-gray-900">MFSelect</h1>
-        <button onClick={handleLogout} className="text-sm text-gray-500 hover:text-gray-900">
-          Logout
-        </button>
+        <nav className="flex items-center gap-6">
+          <span className="text-sm font-medium text-blue-600 border-b-2 border-blue-600 pb-0.5">Screener</span>
+          <Link href="/watchlist" className="text-sm text-gray-500 hover:text-gray-900">Watchlist</Link>
+          <button onClick={handleLogout} className="text-sm text-gray-500 hover:text-gray-900">Logout</button>
+        </nav>
       </header>
 
       <main className="max-w-screen-2xl mx-auto px-6 py-6 flex gap-6">
@@ -177,7 +209,6 @@ export default function DashboardPage() {
                   Schemes ({selectedCodes.size}/{allSchemes.length})
                 </label>
               </div>
-              {/* Search box */}
               <input
                 type="text"
                 placeholder="Search schemes..."
@@ -185,7 +216,6 @@ export default function DashboardPage() {
                 onChange={(e) => setSchemeSearch(e.target.value)}
                 className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-xs text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 mb-1"
               />
-              {/* All checkbox — always operates on the full list */}
               <label className="flex items-center gap-2 py-1 px-2 rounded hover:bg-gray-50 cursor-pointer">
                 <input
                   type="checkbox"
@@ -196,7 +226,6 @@ export default function DashboardPage() {
                 />
                 <span className="text-sm font-medium text-gray-700">All</span>
               </label>
-              {/* Filtered scheme list */}
               <div className="mt-1 max-h-64 overflow-y-auto space-y-0.5">
                 {visibleSchemes.length === 0 ? (
                   <p className="text-xs text-gray-400 px-2 py-2">No schemes match.</p>
@@ -248,6 +277,7 @@ export default function DashboardPage() {
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-200">
                       <th className="text-left px-3 py-3 font-medium text-gray-600 sticky left-0 bg-gray-50 min-w-56">Scheme</th>
+                      <th className="px-2 py-3 font-medium text-gray-600 text-center w-10"></th>
                       <th className="px-3 py-3 font-medium text-gray-600 text-center border-l border-gray-200" colSpan={3}>1Y Return</th>
                       <th className="px-3 py-3 font-medium text-gray-600 text-center border-l border-gray-200" colSpan={3}>3Y Return</th>
                       <th className="px-3 py-3 font-medium text-gray-600 text-center border-l border-gray-200" colSpan={3}>5Y Return</th>
@@ -257,6 +287,7 @@ export default function DashboardPage() {
                     </tr>
                     <tr className="bg-gray-50 border-b border-gray-200 text-gray-400">
                       <th className="sticky left-0 bg-gray-50" />
+                      <th />
                       {["1Y Ret","3Y Ret","5Y Ret","1Y SD","3Y SD","5Y SD"].map((h) => (
                         <>
                           <th key={`${h}-min`} className="px-2 py-1 font-normal border-l border-gray-100 text-center">Min</th>
@@ -272,6 +303,16 @@ export default function DashboardPage() {
                         <td className="px-3 py-2 sticky left-0 bg-white">
                           <div className="font-medium text-gray-900 leading-tight">{s.scheme_name}</div>
                           <div className="text-gray-400 mt-0.5">{s.fund_house}</div>
+                        </td>
+                        <td className="px-2 py-2 text-center">
+                          <button
+                            onClick={() => toggleWatchlist(s.scheme_code)}
+                            disabled={watchlistBusy.has(s.scheme_code)}
+                            title={watchlistCodes.has(s.scheme_code) ? "Remove from watchlist" : "Add to watchlist"}
+                            className="text-lg leading-none disabled:opacity-40 hover:scale-110 transition-transform"
+                          >
+                            {watchlistCodes.has(s.scheme_code) ? "★" : "☆"}
+                          </button>
                         </td>
                         <td className="px-2 py-2 text-center border-l border-gray-100">{pct(s.min_return_1y)}</td>
                         <td className="px-2 py-2 text-center">{pct(s.max_return_1y)}</td>

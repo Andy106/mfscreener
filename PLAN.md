@@ -67,7 +67,17 @@
 - **Dashboard:** left filter panel with category dropdown, date range pickers, scheme search box (filters checklist by name/fund house), scheme checklist with All toggle, and an explicit Apply button; results table loads only on Apply with scheme_codes passed to backend when a subset is selected
 - **Files created/modified:** `backend/models.py`, `backend/services/metrics.py`, `backend/routers/metrics.py`, `backend/main.py`, `frontend/app/dashboard/page.tsx`
 
-### Phase 4 — Mutual Fund Watchlist Module
+## Phase 4 — Mutual Fund Watchlist Module ✅ COMPLETE
 - Enhance the frontend to allow the user to select and save any Mutual Fund Scheme (chosen based on its summary statistics) to a Watchlist.
 - The Scheme code must stored in a table named `watchlist_details` within the database `mfscreener`. 
 - Also add Frontend panels to select schemes from the watchlist, choose specific Start and End Date, and see the Scheme Details, Daily NAV trends visualizations, and Minimum, Maximum and Average 1Y, 3Y and 5Y Rolling Returns and Rolling Standard Deviation in a tabular form.
+
+### Validation Results
+- **watchlist_details:** table created via SQLAlchemy `create_all`; scheme_code primary key
+- **GET /watchlist** → returns full scheme details (joined with scheme_details) ordered by name
+- **POST /watchlist/{scheme_code}** → 201 adds scheme; idempotent (returns 200 if already present)
+- **DELETE /watchlist/{scheme_code}** → 200 removes scheme; 404 if not found
+- **Screener dashboard:** ☆/★ toggle button on every result row; filled star (★) when watchlisted; calls POST/DELETE on click; state updates optimistically without page reload; loads current watchlist state on mount
+- **Watchlist page (`/watchlist`):** left panel lists watchlisted schemes (clickable, with ✕ remove button); right panel shows scheme header (name, fund house, category badge), date range pickers + Apply button, Daily NAV trend line chart (recharts LineChart, thinned to ≤1000 points for performance), and a Min/Max/Avg summary table for 1Y/3Y/5Y Rolling Returns and SDs
+- **Navigation:** header tabs (Screener | Watchlist | Logout) on both dashboard and watchlist pages
+- **Files created/modified:** `backend/models.py`, `backend/routers/watchlist.py`, `backend/main.py`, `frontend/app/dashboard/page.tsx`, `frontend/app/watchlist/page.tsx`

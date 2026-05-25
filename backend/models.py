@@ -68,3 +68,9 @@ class MetricsCalculationTracker(Base):
 
     scheme_code = Column(String, primary_key=True)
     latest_nav_date_factored = Column(Date, nullable=False)
+
+
+class WatchlistDetail(Base):
+    __tablename__ = "watchlist_details"
+
+    scheme_code = Column(String, primary_key=True)
