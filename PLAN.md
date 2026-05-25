@@ -62,9 +62,9 @@
 - **metrics_calculation_tracker:** 309/309 schemes tracked
 - **Calculation method:** pandas rolling windows (1Y=365d, 3Y=1095d, 5Y=1825d); returns as annualised CAGR; SD annualised via sqrt(252)
 - **GET /returns/{scheme_code}**, **GET /risk/{scheme_code}** → time-series with optional start_date/end_date
-- **GET /returns_summary/{scheme_code}**, **GET /risk_summary/{scheme_code}** → Min/Max/Avg per horizon with optional date range
-- **GET /screener** → single aggregated endpoint used by dashboard; accepts category, start_date, end_date
-- **Dashboard:** screener table with category dropdown, date range pickers, search, and Min/Max/Avg columns for all 6 metric series
+- **GET /returns_summary/{scheme_code}**, **GET /risk_summary/{scheme_code}** → Min/Max/Avg per horizon computed on the fly via SQL aggregation against pre-computed rows, filtered by optional date range; row._mapping used for named column access (SQLAlchemy 2.x)
+- **GET /screener** → single aggregated endpoint; accepts category, start_date, end_date, and optional scheme_codes (comma-separated) to limit aggregation to selected schemes only
+- **Dashboard:** left filter panel with category dropdown, date range pickers, scheme search box (filters checklist by name/fund house), scheme checklist with All toggle, and an explicit Apply button; results table loads only on Apply with scheme_codes passed to backend when a subset is selected
 - **Files created/modified:** `backend/models.py`, `backend/services/metrics.py`, `backend/routers/metrics.py`, `backend/main.py`, `frontend/app/dashboard/page.tsx`
 
 ### Phase 4 — Mutual Fund Watchlist Module
