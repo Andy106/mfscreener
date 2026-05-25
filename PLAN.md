@@ -48,12 +48,12 @@
 
 ## Phase 3 — Mutual Fund Screener Module ✅ COMPLETE
 
-- Leverage SQL to query the `nav_details` table and calculate the date wise - 1 Year (1Y), 3 Year (3Y), 5 Year (5Y) Rolling returns and 1 Year, 3 Year, 5 Year Rolling Standard Deviations of each Scheme. 
+- Bulk-read NAV data from `nav_details` into memory and use **pandas rolling windows** (not SQL) to calculate the date wise - 1 Year (1Y), 3 Year (3Y), 5 Year (5Y) Rolling returns (annualised CAGR) and Rolling Standard Deviations (annualised via sqrt(252)) of each Scheme. SQL window functions were evaluated but caused RDS connection drops on large datasets; pandas proved more reliable and faster for this volume. 
 - These must be calculated on a daily basis. Please use a metadata table named `metrics_calculation_tracker` within the database `mfscreener` to maintain latest_nav_date_factored_in_calculations per scheme separately for ease of reference. When the application runs for the first time, it should check what was the latest_nav_date_factored_in_calculation per scheme and if it is not the same as today for any scheme, it should do the calculations for the missed dates. For now, no need to implement any orchestration logic to perform this process on a daily basis if the application has been running continously. 
 - Store the results in tables named `rolling_return_details` (for Rolling Returns) and `rolling_risk_details` (for Rolling Standard Deviations) within the database `mfscreener`. Create composite index on (scheme_code, nav_date).
 - Create /returns/{scheme_code} GET endpoint to retrieve Rolling 1Y, 3Y, 5Y Returns of each scheme from the 'rolling_return_details' table. Add query parameters for Start Date and End Date.
 - Create /risk/{scheme_code} GET endpoint to retrieve Rolling 1Y, 3Y, 5Y Standard Deviations of each scheme from the 'rolling_risk_details' table. Add query parameters for Start Date and End Date.
-- Create /returns_summary/{scheme_code} and /risk_summary/{scheme_code} GET endpoints that support query parameters for Start Date and End Date. For a given Scheme Code, Start Date and End Date, it must dynamically calculate the Minimum, Maximum and Average 1Y, 3Y and 5Y Rolling Returns and Rolling Standard Deviations.
+- Create /returns_summary/{scheme_code} and /risk_summary/{scheme_code} GET endpoints that support query parameters for Start Date and End Date. For a given Scheme Code, Start Date and End Date, these endpoints run SQL MIN/MAX/AVG **on the fly** against the pre-computed rows in `rolling_return_details` / `rolling_risk_details` filtered by the supplied date range — the summary statistics are not stored separately.
 - Build the Frontend to display filters for Scheme Category. For the given filter selection, display all the Schemes' Details along with associated Minimum, Maximum and Average 1Y, 3Y and 5Y Rolling Returns and Rolling Standard Deviations.
 
 ### Validation Results
